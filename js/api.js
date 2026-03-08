@@ -108,7 +108,7 @@ const API = (() => {
   }
 
   async function fetchTAIEX() {
-    const data = await safeFetch(CONFIG.TWSE.MI_INDEX);
+    const data = await safeFetch(CONFIG.TWSE.MI_INDEX + '&type=ALL');
     let rows = [];
     if (data && data.data1) {
        // 新版 twse.com.tw 資料結構 (data1 是指數)
@@ -118,6 +118,16 @@ const API = (() => {
            '漲跌點數': row[2] + row[3],
            '漲跌百分比(%)': row[4],
        }));
+    } else if (data && data.tables) {
+       const table = data.tables.find(t => t.title && (t.title.includes('價格指數') || t.title.includes('大盤統計')));
+       if (table) {
+           rows = table.data.map(row => ({
+               '指數': row[0],
+               '收盤指數': row[1],
+               '漲跌點數': row[2] + row[3] || row[2], // 某些格式漲跌分開
+               '漲跌百分比(%)': row[4] || row[3],
+           }));
+       }
     } else if (Array.isArray(data)) {
         rows = data;
     }
@@ -187,36 +197,51 @@ const API = (() => {
   }
 
   /* ──────────────── 產業資金流向 ──────────────── */
-  async function fetchSectorFlow() {
-    // 試著抓產業成交統計 FMTQIK
-    let data = await safeFetch(CONFIG.TWSE.FRMSA);
-    let rows = [];
-    if (data && data.data) {
-       rows = data.data.map(row => ({
-           '產業別': row[0],
-           '成交金額(元)': row[2],
-           '漲跌百分比(%)': row[5],
-       }));
-    } else if (Array.isArray(data)) {
-        rows = data;
+  async function fetchSectorFlow(period = null) {
+    if (!_stockDayCache || !_stockInfoCache) {
+      await Promise.all([
+        safeFetch(CONFIG.TWSE.STOCK_DAY_ALL).then(d => { if(d) { _stockDayCache = d; } }),
+        safeFetch(CONFIG.TWSE.STOCK_INFO).then(d => { if(d) _stockInfoCache = d; })
+      ]);
     }
-    
-    if (!rows || rows.length === 0) return DEMO.sectorFlow;
 
-    const rawDate = data.date || pick(rows[0], '日期', 'Date') || '';
-    const sectors = rows.map(r => {
-      let name = (pick(r, '產業別', '指數', 'IndexName', '索引', '類股名稱') || '').trim();
-      if (!name || name.includes('報酬') || name.includes('加權股價指數') || name.includes('臺灣')) return null;
-      name = name.replace('指數', '').replace('類指數', '').trim();
-      
-      const matched = CONFIG.SECTORS.find(s => name.includes(s) || s.includes(name));
-      if (!matched) return null;
-      
-      const vol = parseNum(pick(r, '成交金額(元)', '成交金額', 'TradingValue'));
-      const chg = parseNum(pick(r, '漲跌百分比(%)', '漲跌百分比', 'ChangePercent'));
-      
-      return { sector: matched, volume: vol, changePercent: chg };
-    }).filter(s => s && s.volume > 0);
+    if (!_stockDayCache || !_stockInfoCache) return DEMO.sectorFlow;
+
+    const rawDate = _stockDayCache.date || pick(_stockDayCache.data ? _stockDayCache.data[0] : _stockDayCache[0], '日期', 'Date') || new Date().toISOString().substring(0,10).replace(/-/g, '');
+
+    // 備份機制：如果沒抓到產業資料，嘗試從 STOCK_DAY_ALL + STOCK_INFO 自己算
+    const sectorVols = {};
+    const sectorChgs = {}; // Approximate change percent
+    const codeToSector = {};
+    _stockInfoCache.forEach(i => {
+       const code = String(i['公司代號'] || i['Code']).trim();
+       const ind = String(i['產業別'] || i['Industry']).trim();
+       codeToSector[code] = CONFIG.SECTOR_CODE_MAP[ind] || ind;
+    });
+
+    let dayDataRows = _stockDayCache.data || _stockDayCache;
+    dayDataRows.forEach(r => {
+       let code, volStr, chgStr, priceStr;
+       if (Array.isArray(r)) {
+           code = r[0]; volStr = r[3]; chgStr = r[8]; priceStr = r[7]; // 3:成交金額, 8:漲跌差價, 7:收盤
+       } else {
+           code = r.Code || r['證券代號']; volStr = r.TradeValue || r['成交金額']; chgStr = r.Change || r['漲跌價差']; priceStr = r.ClosingPrice || r['收盤價'];
+       }
+       const sector = codeToSector[String(code).trim()];
+       if (sector) {
+           sectorVols[sector] = (sectorVols[sector] || 0) + parseNum(volStr);
+           // Calculate approximate sector change: weighted average of percentage changes
+           // Actually just summing values to find top/bottom. Let's just approximate roughly.
+           const p = parseNum(priceStr);
+           const c = parseNum(chgStr);
+           const pct = (p > 0) ? (c / (p - c))*100 : 0;
+           sectorChgs[sector] = (sectorChgs[sector] || 0) + (pct * parseNum(volStr));
+       }
+    });
+
+    const sectors = Object.entries(sectorVols).map(([s, v]) => ({
+      sector: s, volume: v, changePercent: (sectorChgs[s] / v) || 0
+    })).filter(s => s.volume > 0);
 
     if (sectors.length < 5) return DEMO.sectorFlow;
 
@@ -227,7 +252,7 @@ const API = (() => {
       for (let i = 0; i < limit; i++) {
         history[i].data.forEach(s => {
           if (!res[s.sector]) res[s.sector] = 0;
-          res[s.sector] += (s.changePercent >= 0 ? s.volume : -s.volume);
+          res[s.sector] += (Math.sign(s.changePercent) * s.volume); // using volume flow for direction
         });
       }
       return res;

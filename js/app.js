@@ -43,8 +43,21 @@ const APP = (() => {
     sectorData = sectorFlow;
     renderSectors();
 
-    if (futures.isDemo || taiex.isDemo || otc.isDemo || sectorFlow.isDemo) hasDemo = true;
-
+    const failed = [];
+    if (taiex.isDemo) failed.push('集中市場');
+    if (otc.isDemo) failed.push('櫃買中心');
+    if (futures.isDemo) failed.push('期交所');
+    if (sectorFlow.isDemo) failed.push('產業資金流向');
+    
+    hasDemo = failed.length > 0;
+    const banner = document.getElementById('demoBanner');
+    if (hasDemo) {
+        if (failed.length === 4) {
+            banner.innerHTML = '⚠️ 目前顯示為全示範資料（所有 API 暫時無法連線，可能被阻擋）。';
+        } else {
+            banner.innerHTML = `⚠️ 部分資料連線異常 (${failed.join(', ')})，該區塊目前顯示為示範資料。`;
+        }
+    }
     // Update time
     const now = new Date();
     const timeStr = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
