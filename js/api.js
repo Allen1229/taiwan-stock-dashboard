@@ -8,9 +8,8 @@ const API = (() => {
 
   async function safeFetch(url) {
     const proxies = [
-      '', // Direct
-      CONFIG.CORS_PROXY, // corsproxy.io
-      'https://api.allorigins.win/raw?url=', // allorigins.win
+      CONFIG.CORS_PROXY, // 您的 Cloudflare Worker (最優先)
+      'https://api.allorigins.win/raw?url=', // 備援 1
     ];
 
     for (const prefix of proxies) {
