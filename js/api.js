@@ -33,10 +33,15 @@ const API = (() => {
   function rocToAD(dateStr) {
     if (!dateStr) return '--';
     const s = String(dateStr).replace(/[/\-]/g, '');
-    if (s.length === 7 || s.length === 8) {
-      const y = parseInt(s.substring(0, s.length - 4), 10) + 1911;
-      const m = s.substring(s.length - 4, s.length - 2);
-      const d = s.substring(s.length - 2);
+    if (s.length === 7) {
+      const y = parseInt(s.substring(0, 3), 10) + 1911;
+      const m = s.substring(3, 5);
+      const d = s.substring(5);
+      return `${y}/${m}/${d}`;
+    } else if (s.length === 8) {
+      const y = s.substring(0, 4);
+      const m = s.substring(4, 6);
+      const d = s.substring(6);
       return `${y}/${m}/${d}`;
     }
     return dateStr;
@@ -50,8 +55,11 @@ const API = (() => {
   }
 
   function fmtVolume(val) {
-    const v = parseFloat(val);
-    const n = Math.abs(v || 0);
+    if (!val) return '0';
+    const cleanStr = String(val).replace(/,/g, '');
+    const v = parseFloat(cleanStr);
+    if (isNaN(v)) return '0';
+    const n = Math.abs(v);
     const sign = v < 0 ? '-' : '';
     if (n >= 1e12) return sign + (n / 1e12).toFixed(1) + ' 兆';
     if (n >= 1e8) return sign + (n / 1e8).toFixed(1) + ' 億';
@@ -149,10 +157,18 @@ const API = (() => {
     // 從大盤統計資訊抓成交金額
     let rawVolume = '0';
     if (data && data.data8) {
-       // data8 是大盤成交統計
+       // data8 是大盤成交統計 (舊版)
        const volRow = data.data8.find(r => r[0] && r[0].includes('成交金額'));
        if (volRow) rawVolume = volRow[1];
-    } else {
+    } else if (data && data.tables) {
+       // (新版) 找大盤統計資訊
+       const statTable = data.tables.find(t => t.title && t.title.includes('大盤統計'));
+       if (statTable) {
+           const volRow = statTable.data.find(r => r[0] && r[0].includes('證券合計'));
+           if (volRow) rawVolume = volRow[1];
+       }
+    }
+    if (rawVolume === '0') {
         rawVolume = pick(row, '成交金額(元)', '成交金額', 'TradingValue') || '0';
     }
 
