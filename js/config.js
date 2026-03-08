@@ -9,15 +9,15 @@ const CONFIG = {
   // TWSE（臺灣證券交易所）
   TWSE: {
     // 每日市場成交資訊（含加權指數）
-    MI_INDEX: 'https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX',
+    MI_INDEX: 'https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json',
     // 全部個股日成交資訊（含股價、漲跌、成交量）
-    STOCK_DAY_ALL: 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL',
+    STOCK_DAY_ALL: 'https://www.twse.com.tw/exchangeReport/STOCK_DAY_ALL?response=json',
     // 每日收盤行情（全部）— 含 PER、殖利率、PBR
-    STOCK_ALL: 'https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL',
-    // 上市公司基本資料（含產業別代號）
+    STOCK_ALL: 'https://www.twse.com.tw/exchangeReport/BWIBBU_ALL?response=json',
+    // 上市公司基本資料（含產業別代號）- 這個只能用 openapi
     STOCK_INFO: 'https://openapi.twse.com.tw/v1/opendata/t187ap03_L',
     // 類股指數彙總
-    FRMSA: 'https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK',
+    FRMSA: 'https://www.twse.com.tw/exchangeReport/FMTQIK?response=json',
   },
 
   // TPEx（櫃買中心）

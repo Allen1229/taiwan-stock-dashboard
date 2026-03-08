@@ -7,20 +7,19 @@ const API = (() => {
   let _stockDayCache = null;
 
   async function safeFetch(url) {
-    const proxies = [
-      CONFIG.CORS_PROXY, // 您的 Cloudflare Worker (最優先)
-      'https://api.allorigins.win/raw?url=', // 備援 1
-    ];
-
-    for (const prefix of proxies) {
-      try {
-        const fetchUrl = prefix ? prefix + encodeURIComponent(url) : url;
-        const res = await fetch(fetchUrl);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && !data.error && (Array.isArray(data) ? data.length > 0 : true)) return data;
-        }
-      } catch (_) {}
+    if (!CONFIG.CORS_PROXY) return null;
+    try {
+      const fetchUrl = CONFIG.CORS_PROXY + encodeURIComponent(url);
+      console.log(`正在透過代理請求: ${fetchUrl}`);
+      const res = await fetch(fetchUrl);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && !data.error && (Array.isArray(data) ? data.length > 0 : true)) return data;
+      } else {
+        console.warn(`代理伺服器回傳錯誤 (${res.status}): ${fetchUrl}`);
+      }
+    } catch (err) {
+      console.error(`代理連線失敗: ${CONFIG.CORS_PROXY}`, err);
     }
     return null;
   }
@@ -104,10 +103,23 @@ const API = (() => {
 
   async function fetchTAIEX() {
     const data = await safeFetch(CONFIG.TWSE.MI_INDEX);
-    if (!data || !Array.isArray(data)) return DEMO.taiex;
+    let rows = [];
+    if (data && data.data1) {
+       // 新版 twse.com.tw 資料結構 (data1 是指數)
+       rows = data.data1.map(row => ({
+           '指數': row[0],
+           '收盤指數': row[1],
+           '漲跌點數': row[2] + row[3],
+           '漲跌百分比(%)': row[4],
+       }));
+    } else if (Array.isArray(data)) {
+        rows = data;
+    }
+
+    if (!rows || rows.length === 0) return DEMO.taiex;
 
     // 嚴格過濾，必須是 "發行量加權股價指數" 且不含 "報酬" 
-    const row = data.find(r => {
+    const row = rows.find(r => {
       const name = (pick(r, '指數', 'IndexName', '索引') || '').trim();
       return name === '發行量加權股價指數' || name === 'TAIEX';
     });
@@ -116,8 +128,18 @@ const API = (() => {
       // 異常過高(可能是寶島指數) 則進入 DEMO
       return DEMO.taiex;
     }
-    const rawDate = pick(row, '日期', 'Date') || '';
-    const rawVolume = pick(row, '成交金額(元)', '成交金額', 'TradingValue') || '0';
+    const rawDate = pick(row, '日期', 'Date') || data.date || '';
+    
+    // 從大盤統計資訊抓成交金額
+    let rawVolume = '0';
+    if (data && data.data8) {
+       // data8 是大盤成交統計
+       const volRow = data.data8.find(r => r[0] && r[0].includes('成交金額'));
+       if (volRow) rawVolume = volRow[1];
+    } else {
+        rawVolume = pick(row, '成交金額(元)', '成交金額', 'TradingValue') || '0';
+    }
+
     const closePrice = parseNum(pick(row, '收盤指數', 'ClosingIndex'));
     const history = saveHistory('taiex_p', closePrice, rawDate);
     const volHistory = saveHistory('taiex_v', rawVolume, rawDate);
@@ -158,21 +180,28 @@ const API = (() => {
     };
   }
 
-  /* ──────────────── 產業資金流向 (BFTTQIK - 產業別成交統計) ──────────────── */
+  /* ──────────────── 產業資金流向 ──────────────── */
   async function fetchSectorFlow() {
-    // 試著抓產業成交統計 BFTTQIK
-    let data = await safeFetch('https://openapi.twse.com.tw/v1/exchangeReport/BFTTQIK');
-    if (!data || !Array.isArray(data)) {
-      // 備援抓 MI_INDEX
-      data = await safeFetch(CONFIG.TWSE.MI_INDEX);
+    // 試著抓產業成交統計 FMTQIK
+    let data = await safeFetch(CONFIG.TWSE.FRMSA);
+    let rows = [];
+    if (data && data.data) {
+       rows = data.data.map(row => ({
+           '產業別': row[0],
+           '成交金額(元)': row[2],
+           '漲跌百分比(%)': row[5],
+       }));
+    } else if (Array.isArray(data)) {
+        rows = data;
     }
-    if (!data || !Array.isArray(data)) return DEMO.sectorFlow;
+    
+    if (!rows || rows.length === 0) return DEMO.sectorFlow;
 
-    const rawDate = pick(data[0], '日期', 'Date') || '';
-    const sectors = data.map(r => {
-      let name = (pick(r, '產業別', '指數', 'IndexName', '索引') || '').trim();
+    const rawDate = data.date || pick(rows[0], '日期', 'Date') || '';
+    const sectors = rows.map(r => {
+      let name = (pick(r, '產業別', '指數', 'IndexName', '索引', '類股名稱') || '').trim();
       if (!name || name.includes('報酬') || name.includes('加權股價指數') || name.includes('臺灣')) return null;
-      name = name.replace('指數', '').trim();
+      name = name.replace('指數', '').replace('類指數', '').trim();
       
       const matched = CONFIG.SECTORS.find(s => name.includes(s) || s.includes(name));
       if (!matched) return null;
