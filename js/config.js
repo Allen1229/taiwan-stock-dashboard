@@ -4,7 +4,7 @@
 
 const CONFIG = {
   // CORS Proxy（瀏覽器端跨域用）
-  CORS_PROXY: 'https://corsproxy.io/?url=',
+  CORS_PROXY: 'https://shy-butterfly-d989tw-stock-proxy.mk259277.workers.dev/?url=',
 
   // TWSE（臺灣證券交易所）
   TWSE: {
