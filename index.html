@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台股資訊儀表板 — 台指期 · 加權 · 櫃買 · 產業資金流向</title>
+  <meta name="description" content="一頁式台灣股票資訊工具，提供台指期、加權指數、櫃買指數以及產業資金流向與類股成分資訊。" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>📈</text></svg>" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">載入台股資訊中…</div>
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <div class="header-logo">📈</div>
+      <h1>台股資訊儀表板</h1>
+    </div>
+    <div class="header-right">
+      <div class="update-time" id="updateTime">
+        <span class="dot"></span>
+        <span>更新時間：載入中…</span>
+      </div>
+      <button class="btn-refresh" id="btnRefresh" title="重新載入資料">
+        <span class="refresh-icon">⟳</span> 更新
+      </button>
+    </div>
+  </header>
+
+  <!-- Demo Banner -->
+  <div class="demo-banner" id="demoBanner">
+    <div class="demo-banner-inner">
+      ⚠️ 目前顯示為示範資料（API 暫時無法連線）。<br>
+      <small>提示：若要套用實時正確資訊，請在瀏覽器安裝 <b>CORS Unblock</b> 擴充功能，或使用本工具提供的 Proxy Fallback。</small>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <main class="container">
+
+    <!-- ── 指數摘要 ── -->
+    <div class="section-title"><span class="icon">📊</span> 市場指數總覽</div>
+    <div class="index-cards" id="indexCards">
+      <!-- 台指期 -->
+      <div class="card skeleton" id="cardFutures">
+        <div class="card-label">台指期 <span class="badge">TX</span></div>
+        <div class="card-value">--</div>
+        <div class="card-change flat-text">-- </div>
+        <div class="card-meta">
+          <div class="meta-item"><span class="label">開盤</span><span class="value" id="fOpen">--</span></div>
+          <div class="meta-item"><span class="label">最高</span><span class="value" id="fHigh">--</span></div>
+          <div class="meta-item"><span class="label">最低</span><span class="value" id="fLow">--</span></div>
+          <div class="meta-item"><span class="label">成交量</span><span class="value" id="fVol">--</span></div>
+        </div>
+      </div>
+
+      <!-- 加權指數 -->
+      <div class="card skeleton" id="cardTaiex">
+        <div class="card-label">加權指數 <span class="badge">TAIEX</span></div>
+        <div class="card-value">--</div>
+        <div class="card-change flat-text">-- </div>
+        <div class="card-meta">
+          <div class="meta-item"><span class="label">成交金額</span><span class="value" id="tVol">--</span></div>
+          <div class="meta-item"><span class="label">日期</span><span class="value" id="tDate">--</span></div>
+        </div>
+        <div class="card-ma" id="tMA">
+          <div class="ma-item" id="tMA5"><span>MA5</span><span class="status">--</span></div>
+          <div class="ma-item" id="tMA10"><span>MA10</span><span class="status">--</span></div>
+          <div class="ma-item" id="tMA20"><span>MA20</span><span class="status">--</span></div>
+          <div class="ma-item" id="tMA60"><span>MA60</span><span class="status">--</span></div>
+        </div>
+      </div>
+
+      <!-- 櫃買指數 -->
+      <div class="card skeleton" id="cardOtc">
+        <div class="card-label">櫃買指數 <span class="badge">OTC</span></div>
+        <div class="card-value">--</div>
+        <div class="card-change flat-text">-- </div>
+        <div class="card-meta">
+          <div class="meta-item"><span class="label">成交金額</span><span class="value" id="oVol">--</span></div>
+          <div class="meta-item"><span class="label">日期</span><span class="value" id="oDate">--</span></div>
+        </div>
+        <div class="card-ma" id="oMA">
+          <div class="ma-item" id="oMA5"><span>MA5</span><span class="status">--</span></div>
+          <div class="ma-item" id="oMA10"><span>MA10</span><span class="status">--</span></div>
+          <div class="ma-item" id="oMA20"><span>MA20</span><span class="status">--</span></div>
+          <div class="ma-item" id="oMA60"><span>MA60</span><span class="status">--</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 產業資金流向 ── -->
+    <div class="section-title"><span class="icon">💰</span> 近十日淨流入/流出前五名</div>
+    <div class="sort-controls" id="sortControls">
+      <button class="sort-btn active" data-sort="change-desc">漲幅排序 ▼</button>
+      <button class="sort-btn" data-sort="change-asc">跌幅排序 ▲</button>
+      <button class="sort-btn" data-sort="volume-desc">成交量排序</button>
+    </div>
+    <div class="sector-grid" id="sectorGrid">
+      <!-- dynamically rendered -->
+    </div>
+
+    <!-- ── 產業成分股 ── -->
+    <div class="stocks-panel" id="stocksPanel">
+      <div class="section-title"><span class="icon">🏢</span> <span id="stocksSectorName">--</span> 成分股</div>
+      <div class="stocks-table-wrap">
+        <table class="stocks-table">
+          <thead>
+            <tr>
+              <th>代號</th>
+              <th>名稱</th>
+              <th style="text-align:right">股價</th>
+              <th style="text-align:right">漲跌幅</th>
+              <th style="text-align:right">成交量(張)</th>
+            </tr>
+          </thead>
+          <tbody id="stocksBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    資料來源：<a href="https://openapi.twse.com.tw" target="_blank">TWSE</a> ·
+    <a href="https://www.tpex.org.tw/openapi/" target="_blank">TPEx</a> ·
+    <a href="https://openapi.taifex.com.tw" target="_blank">TAIFEX</a>
+    　|　資料每日收盤後更新，僅供參考，不構成投資建議。
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
