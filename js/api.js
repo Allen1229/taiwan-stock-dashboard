@@ -13,8 +13,14 @@ const API = (() => {
       console.log(`正在透過代理請求: ${fetchUrl}`);
       const res = await fetch(fetchUrl);
       if (res.ok) {
-        const data = await res.json();
-        if (data && !data.error && (Array.isArray(data) ? data.length > 0 : true)) return data;
+        const text = await res.text();
+        try {
+          const data = JSON.parse(text);
+          if (data && !data.error && (Array.isArray(data) ? data.length > 0 : true)) return data;
+        } catch (e) {
+          console.warn(`伺服器回傳了非 JSON 格式的內容 (可能被阻擋或限流): ${fetchUrl}`);
+          return null;
+        }
       } else {
         console.warn(`代理伺服器回傳錯誤 (${res.status}): ${fetchUrl}`);
       }
@@ -256,14 +262,32 @@ const API = (() => {
     const industries = _stockInfoCache.filter(i => String(i['產業別'] || i['Industry']).trim() === code)
                                      .map(i => String(i['公司代號'] || i['Code']).trim());
     const codes = new Set(industries);
-    const results = _stockDayCache.filter(r => codes.has(String(r['Code'] || r['證券代號']).trim())).slice(0, 50).map(r => {
-      const cp = parseNum(r.ClosingPrice || r['收盤價']), ch = parseNum(r.Change || r['漲跌價差']);
+    
+    let rows = _stockDayCache;
+    if (_stockDayCache && _stockDayCache.data) {
+        rows = _stockDayCache.data;
+    }
+
+    const results = rows.filter(r => {
+      const c = Array.isArray(r) ? r[0] : (r['Code'] || r['證券代號']);
+      return c && codes.has(String(c).trim());
+    }).slice(0, 50).map(r => {
+      let scode, sname, cpStr, chStr, volStr;
+      if (Array.isArray(r)) {
+          scode = r[0]; sname = r[1]; cpStr = r[7]; chStr = r[8]; volStr = r[2];
+      } else {
+          scode = r.Code || r['證券代號']; sname = r.Name || r['證券名稱'];
+          cpStr = r.ClosingPrice || r['收盤價']; chStr = r.Change || r['漲跌價差'];
+          volStr = r.TradeVolume || r['成交股數'];
+      }
+      
+      const cp = parseNum(cpStr), ch = parseNum(chStr);
       return {
-        code: r.Code || r['證券代號'], name: r.Name || r['證券名稱'], price: cp.toFixed(2),
+        code: scode, name: sname, price: cp.toFixed(2),
         change: (ch > 0 ? '+' : '') + ch.toFixed(2),
         changePct: (cp > 0 ? (ch/(cp-ch)*100).toFixed(2) : '0.00') + '%',
         changeDir: ch > 0 ? 'gain' : ch < 0 ? 'loss' : 'flat',
-        volume: (parseNum(r.TradeVolume || r['成交股數'])/1000).toFixed(0)
+        volume: (parseNum(volStr)/1000).toFixed(0)
       };
     });
     return results.length ? results : DEMO.getStocksBySector(sectorName);
